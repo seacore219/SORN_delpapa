@@ -6,7 +6,11 @@ ENV MPLBACKEND=Agg
 
 COPY requirements.txt .
 
-RUN apt-get update && apt-get install -y time && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's/deb.debian.org/archive.debian.org/g; s/security.debian.org/archive.debian.org\/debian-security/g' /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install -y time \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
