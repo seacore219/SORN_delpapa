@@ -30,8 +30,8 @@ c.W_ie = utils.Bunch(use_sparse=False,
                      lamb=1.0*c.N_i,
                      avoid_self_connections=True)
 
-c.steps_plastic = 200 # steps before the perturbation
-c.steps_perturbation = 200 # steps after the perturbation
+c.steps_plastic = 6000000 # steps before the perturbation
+c.steps_perturbation = 0 # steps after the perturbation
 c.N_steps = (c.steps_plastic + 2*c.steps_perturbation)
 c.N_iterations = 1
 c.eta_ip = 0.01

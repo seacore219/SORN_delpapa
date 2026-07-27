@@ -15,8 +15,9 @@ NAMESPACE = 'hengenlab'
 IMAGE = 'seacore219/sorn:latest'
 PVC_NAME = 'charlesd-sorn-sweep-storage'
 
-H_IP_VALUES = [round(0.05 + 0.05 * i, 2) for i in range(6)]  # 0.05 ... 0.30
-N_REPEATS = 3
+# H_IP_VALUES = [round(0.05 + 0.05 * i, 2) for i in range(6)]  # 0.05 ... 0.30
+H_IP_VALUES = [round(0.01 + 0.01 * i, 2) for i in range(20)]  # 0.01 ... 0.20
+N_REPEATS = 20
 
 JOB_DIR = 'nrp_jobs'
 if not os.path.exists(JOB_DIR):
