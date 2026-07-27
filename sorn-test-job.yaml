@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: charlesd-sorn-test
+  namespace: hengenlab
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: sorn
+          image: seacore219/sorn:latest
+          imagePullPolicy: Always
+          env:
+            - name: PARAM_MODULE
+              value: delpapa.param_FrozenPlasticity
+            - name: SORN_H_IP
+              value: "0.1"
+            - name: SORN_RUN_TAG
+              value: nrp-test-1
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+              ephemeral-storage: "2Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+              ephemeral-storage: "2Gi"
