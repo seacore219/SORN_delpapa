@@ -9,7 +9,8 @@ sys.path.insert(1,"../")
 
 import utils
 # This assumes that you are in the folder "common"
-utils.initialise_backup(mount="../", dest="../backup")
+run_tag = os.environ.get('SORN_RUN_TAG', 'manual')
+utils.initialise_backup(mount="../", dest="../backup/" + run_tag)
 utils.backup(__file__)
 
 from utils.backup import dest_directory

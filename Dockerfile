@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["bash"]
+CMD ["sh", "-c", "cd common && python test_single.py ${PARAM_MODULE:-delpapa.param_FrozenPlasticity}"]
