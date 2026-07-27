@@ -3,6 +3,7 @@ import numpy as np
 import utils
 utils.backup(__file__)
 from common.defaults import *
+import os
 
 c.N_e = 200
 c.N_i = int(np.floor(0.2*c.N_e))
@@ -34,7 +35,7 @@ c.steps_perturbation = 200 # steps after the perturbation
 c.N_steps = (c.steps_plastic + 2*c.steps_perturbation)
 c.N_iterations = 1
 c.eta_ip = 0.01
-c.h_ip = 0.1
+c.h_ip = float(os.environ.get('SORN_H_IP', 0.1))
 c.noise_sig = np.sqrt(0.05)
 c.noise_fire = 0
 c.noise_fire_struc = 0

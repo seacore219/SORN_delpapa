@@ -2,3 +2,4 @@ backup/
 __pycache__/
 *.pyc
 .DS_Store
+sweep_logs/
