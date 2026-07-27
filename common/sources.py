@@ -184,7 +184,6 @@ class CountingSource(AbstractSource):
     def index(self):
         character = self.char()
 
-        import ipdb; ipdb.set_trace()
         ind = self.lookup[character]
         return ind
 

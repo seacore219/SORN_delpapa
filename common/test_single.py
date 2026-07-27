@@ -90,8 +90,8 @@ sorn.quicksave(filename=os.path.join(c.logfilepath,'net.pickle'))
 
 # Plot data collected by stats
 #~ dest_directory = os.path.join(dest_directory,'common')
-experiment.plot_single(dest_directory,
-                       os.path.join('common','result.h5'))
+# experiment.plot_single(dest_directory,
+#                        os.path.join('common','result.h5'))
 
 # Display figures
 # plt.show()
