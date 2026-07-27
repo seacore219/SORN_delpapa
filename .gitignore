@@ -1,5 +1,6 @@
 backup/
 __pycache__/
+nrp-data/
 *.pyc
 .DS_Store
 sweep_logs/

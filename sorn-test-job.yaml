@@ -18,7 +18,7 @@ spec:
             - name: SORN_H_IP
               value: "0.1"
             - name: SORN_RUN_TAG
-              value: nrp-test-1
+              value: nrp-test-2
           resources:
             requests:
               cpu: "1"
@@ -28,3 +28,10 @@ spec:
               cpu: "1"
               memory: "2Gi"
               ephemeral-storage: "2Gi"
+          volumeMounts:
+            - name: sorn-storage
+              mountPath: /sorn/backup
+      volumes:
+        - name: sorn-storage
+          persistentVolumeClaim:
+            claimName: charlesd-sorn-storage
