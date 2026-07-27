@@ -6,7 +6,8 @@ ENV MPLBACKEND=Agg
 
 COPY requirements.txt .
 
-RUN sed -i 's/deb.debian.org/archive.debian.org/g; s/security.debian.org/archive.debian.org\/debian-security/g' /etc/apt/sources.list \
+RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list \
+    && echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list \
     && apt-get update \
     && apt-get install -y time \
     && rm -rf /var/lib/apt/lists/*
