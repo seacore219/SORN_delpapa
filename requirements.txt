@@ -1,0 +1,6 @@
+numpy==1.16.6
+scipy==1.2.3
+matplotlib==2.2.5
+numexpr==2.6.9
+tables==3.4.4
+ipdb==0.13.3
