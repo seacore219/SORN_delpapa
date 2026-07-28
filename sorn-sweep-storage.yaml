@@ -9,4 +9,4 @@ spec:
   storageClassName: rook-cephfs   # replace if kubectl get storageclass showed a different name
   resources:
     requests:
-      storage: 20Gi
+      storage: 150Gi
