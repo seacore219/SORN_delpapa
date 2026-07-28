@@ -31,7 +31,7 @@ c.W_ie = utils.Bunch(use_sparse=False,
                      avoid_self_connections=True)
 
 c.steps_plastic = 6000000 # steps before the perturbation
-c.steps_perturbation = 0 # steps after the perturbation
+c.steps_perturbation = 500000 # steps after the perturbation
 c.N_steps = (c.steps_plastic + 2*c.steps_perturbation)
 c.N_iterations = 1
 c.eta_ip = 0.01
@@ -40,7 +40,6 @@ c.noise_sig = np.sqrt(0.05)
 c.noise_fire = 0
 c.noise_fire_struc = 0
 
-
 c.stats.file_suffix = 'test'
 c.display = True
 # save the spikes of the perturbation perdiod:
@@ -48,6 +47,7 @@ c.display = True
 # second half is the perturbated network
 c.stats.only_last_spikes = (2*c.steps_perturbation)
 c.stats.save_spikes = True
+c.stats.only_last_spikes = 6000000
 
 c.experiment.module = 'delpapa.experiment_FrozenPlasticity'
 c.experiment.name = 'Experiment_test'

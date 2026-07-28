@@ -19,6 +19,7 @@ class Experiment_test(AbstractExperiment):
         stats_single = [
                          ActivityStat(),
                          ConnectionFractionStat(),
+                         SpikesStat(),
                         ]
         return (self.inputsource,stats_single)
 

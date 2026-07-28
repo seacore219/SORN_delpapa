@@ -87,6 +87,7 @@ if sorn.c.stats.control_rates:
 stats.single_report()
 stats.disable = True
 stats.dlog.close()
+sorn.stats = None   
 sorn.quicksave(filename=os.path.join(c.logfilepath,'net.pickle'))
 
 # Plot data collected by stats

@@ -1012,9 +1012,9 @@ class SpikesStat(AbstractStat):
             self.neurons = sorn.c.N_e
         if sorn.c.stats.has_key('only_last_spikes'):
             steps = sorn.c.stats.only_last_spikes
-            c[self.sattr] = zeros((self.neurons,steps))
+            c[self.sattr] = zeros((self.neurons, steps), dtype=bool)
         else:
-            c[self.sattr] = zeros((self.neurons,sorn.c.N_steps))
+            c[self.sattr] = zeros((self.neurons, sorn.c.N_steps), dtype=bool)
         self.step = 0
     def add(self,c,sorn):
         if self.inh:
@@ -1046,9 +1046,9 @@ class SpikesInhStat(AbstractStat):
         self.neurons = sorn.c.N_i
         if sorn.c.stats.has_key('only_last_spikes'):
             steps = sorn.c.stats.only_last_spikes
-            c[self.sattr] = zeros((self.neurons,steps))
+            c[self.sattr] = zeros((self.neurons, steps), dtype=bool)
         else:
-            c[self.sattr] = zeros((self.neurons,sorn.c.N_steps))
+            c[self.sattr] = zeros((self.neurons, sorn.c.N_steps), dtype=bool)
         self.step = 0
     def add(self,c,sorn):
         spikes_ihn = sorn.y
