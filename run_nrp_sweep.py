@@ -1,7 +1,6 @@
 """
-Launches the h_ip sweep as NRP Kubernetes Jobs, throttled to stay safely
-under the namespace's 200-pod quota. Submits in waves, checking how many
-of our jobs are still active before submitting more.
+Launches the h_ip sweep as NRP Kubernetes Jobs, packing BATCH_SIZE
+simulations into each pod so total pod count stays well under quota.
 
 Run this from the repo root: python run_nrp_sweep.py
 """
@@ -10,16 +9,22 @@ import json
 import os
 import subprocess
 import time
+from datetime import datetime
+DATE_STR = datetime.now().strftime('%m_%d_%y')
 
 NAMESPACE = 'hengenlab'
 IMAGE = 'seacore219/sorn:latest'
 PVC_NAME = 'charlesd-sorn-sweep-storage'
-JOB_PREFIX = 'charlesd-sweep-hip-'
+JOB_PREFIX = 'charlesd-sweep-batch-'
 
-H_IP_VALUES = [0.01, 0.02]   # 2 values
-N_REPEATS = 10                # 10 runs each = 20 jobs total
+H_IP_VALUES = [round(0.01 + 0.01 * i, 2) for i in range(30)]   # 30 values
+N_REPEATS = 14                                                  # 420 total sims
 
-MAX_CONCURRENT = 150   # safely under the 200-pod namespace quota
+BATCH_SIZE = 21          # sims per pod -- 420 / 21 = 20 pods exactly
+CPU_PER_SIM = 1          # matches observed ~99% CPU utilization per sim
+MEMORY_PER_SIM_GI = 2.0  # measured peak ~1.55GB; real margin above it
+
+MAX_CONCURRENT_PODS = 1   # start low -- see note below before raising
 POLL_SECONDS = 60
 
 JOB_DIR = 'nrp_jobs'
@@ -43,19 +48,17 @@ spec:
           env:
             - name: PARAM_MODULE
               value: delpapa.param_FrozenPlasticity
-            - name: SORN_H_IP
-              value: "{h_ip}"
-            - name: SORN_RUN_TAG
-              value: {run_tag}
+            - name: SORN_BATCH
+              value: '{batch_json}'
           resources:
             requests:
-              cpu: "1"
-              memory: "3Gi"
-              ephemeral-storage: "2Gi"
+              cpu: "{cpu}"
+              memory: "{memory}Gi"
+              ephemeral-storage: "4Gi"
             limits:
-              cpu: "1"
-              memory: "3Gi"
-              ephemeral-storage: "2Gi"
+              cpu: "{cpu}"
+              memory: "{memory}Gi"
+              ephemeral-storage: "4Gi"
           volumeMounts:
             - name: sorn-storage
               mountPath: /sorn/backup
@@ -66,27 +69,25 @@ spec:
 """
 
 
-def job_name_for(h_ip, run_number):
-    h_ip_str = str(h_ip).replace('.', 'p')
-    return '%s%s-run%d' % (JOB_PREFIX, h_ip_str, run_number)
-
-
-def build_job_list():
-    jobs = []
+def build_run_list():
+    runs = []
     for h_ip in H_IP_VALUES:
         for run_number in range(1, N_REPEATS + 1):
-            jobs.append((h_ip, run_number))
-    return jobs
+            run_tag = '%s_h_ip_%s/h_ip_%s_run%d' % (DATE_STR, h_ip, h_ip, run_number)
+            runs.append({'h_ip': h_ip, 'run_tag': run_tag})
+    return runs
+
+
+def chunk(lst, size):
+    return [lst[i:i + size] for i in range(0, len(lst), size)]
 
 
 def count_active_jobs():
-    """Counts our jobs that haven't succeeded or failed yet."""
     out = subprocess.check_output(['kubectl', 'get', 'jobs', '-n', NAMESPACE, '-o', 'json'])
     data = json.loads(out)
     active = 0
     for item in data.get('items', []):
-        name = item['metadata']['name']
-        if not name.startswith(JOB_PREFIX):
+        if not item['metadata']['name'].startswith(JOB_PREFIX):
             continue
         status = item.get('status', {})
         if status.get('succeeded', 0) < 1 and status.get('failed', 0) < 1:
@@ -94,41 +95,49 @@ def count_active_jobs():
     return active
 
 
-def submit_job(h_ip, run_number):
-    run_tag = 'h_ip_%s_run%d' % (h_ip, run_number)
-    job_name = job_name_for(h_ip, run_number)
+def submit_batch(batch_index, batch):
+    job_name = '%s%03d' % (JOB_PREFIX, batch_index)
 
     yaml_content = JOB_TEMPLATE.format(
         job_name=job_name, namespace=NAMESPACE, image=IMAGE,
-        h_ip=h_ip, run_tag=run_tag, pvc_name=PVC_NAME
+        batch_json=json.dumps(batch),
+        cpu=BATCH_SIZE * CPU_PER_SIM,
+        memory=BATCH_SIZE * MEMORY_PER_SIM_GI,
+        pvc_name=PVC_NAME
     )
     yaml_path = os.path.join(JOB_DIR, job_name + '.yaml')
     with open(yaml_path, 'w') as f:
         f.write(yaml_content)
 
     subprocess.call(['kubectl', 'delete', '-f', yaml_path, '--ignore-not-found=true'])
-    subprocess.call(['kubectl', 'apply', '-f', yaml_path])
-    print('Submitted %s (h_ip=%s, run=%d)' % (job_name, h_ip, run_number))
+    result = subprocess.call(['kubectl', 'apply', '-f', yaml_path])
+    if result == 0:
+        print('Submitted %s (%d sims)' % (job_name, len(batch)))
+    else:
+        print('FAILED to submit %s -- kubectl exit code %d' % (job_name, result))
 
 
 def main():
-    pending = build_job_list()
-    print('Total jobs to run: %d' % len(pending))
+    runs = build_run_list()
+    batches = chunk(runs, BATCH_SIZE)
+    pending = list(enumerate(batches))
+    print('Total sims: %d, batched into %d pods of up to %d each' %
+          (len(runs), len(batches), BATCH_SIZE))
 
     while pending:
         active = count_active_jobs()
-        slots = MAX_CONCURRENT - active
+        slots = MAX_CONCURRENT_PODS - active
         if slots > 0:
-            batch = pending[:slots]
+            to_submit = pending[:slots]
             pending = pending[slots:]
-            for h_ip, run_number in batch:
-                submit_job(h_ip, run_number)
-            print('%d jobs queued, ~%d now active' % (len(pending), active + len(batch)))
+            for batch_index, batch in to_submit:
+                submit_batch(batch_index, batch)
+            print('%d pods queued, ~%d now active' % (len(pending), active + len(to_submit)))
         else:
-            print('At concurrency limit (%d active) -- waiting...' % active)
+            print('At concurrency limit (%d active pods) -- waiting...' % active)
         time.sleep(POLL_SECONDS)
 
-    print('All jobs submitted. Check `kubectl get jobs -n hengenlab` until all show Complete.')
+    print('All batches submitted.')
 
 
 if __name__ == '__main__':

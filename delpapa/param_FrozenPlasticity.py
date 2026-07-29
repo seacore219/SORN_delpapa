@@ -47,7 +47,7 @@ c.display = True
 # second half is the perturbated network
 c.stats.only_last_spikes = (2*c.steps_perturbation)
 c.stats.save_spikes = True
-c.stats.only_last_spikes = 6000000
+c.stats.only_last_spikes = 6500000
 
 c.experiment.module = 'delpapa.experiment_FrozenPlasticity'
 c.experiment.name = 'Experiment_test'

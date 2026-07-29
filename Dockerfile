@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["sh", "-c", "cd common && /usr/bin/time -v python -u test_single.py ${PARAM_MODULE:-delpapa.param_FrozenPlasticity}"]
+CMD ["python", "-u", "batch_runner.py"]
