@@ -1,6 +1,9 @@
-backup/
-sweep_logs/
 .git/
+backup/
 __pycache__/
+nrp-data/
+nrp-sweep-data/
 *.pyc
 .DS_Store
+sweep_logs/
+nrp_jobs/
