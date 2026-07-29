@@ -21,7 +21,7 @@ H_IP_VALUES = [round(0.01 + 0.01 * i, 2) for i in range(30)]   # 30 values
 N_REPEATS = 14                                                  # 420 total sims
 
 BATCH_SIZE = 21          # sims per pod -- 420 / 21 = 20 pods exactly
-CPU_PER_SIM = 1          # matches observed ~99% CPU utilization per sim
+CPU_PER_SIM = 20          # matches observed ~99% CPU utilization per sim
 MEMORY_PER_SIM_GI = 2.0  # measured peak ~1.55GB; real margin above it
 
 MAX_CONCURRENT_PODS = 1   # start low -- see note below before raising
