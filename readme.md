@@ -46,3 +46,8 @@ Figure: `avalanches/Fig7.py`.
 ## Dependencies
 
 This code relies on the [powerlaw](https://pypi.python.org/pypi/powerlaw) python package to fit the power-law distributions of avalanche sizes and durations.
+
+## Hlab Analysis Dependencies:
+git clone https://github.com/hengenlab/criticality_tumbleweed.git
+cd criticality_tumbleweed
+pip3 install .
