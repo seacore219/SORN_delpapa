@@ -70,12 +70,16 @@ import criticality_tumbleweed as crt
 # ---------------------------------------------------------------------------
 
 SWEEP_ROOT = "nrp-sweep-data"
+CONFIG_NAME = "batch_0.01_0.01_0.3"    # the current parameter-combo folder under SWEEP_ROOT --
+                              # change this each time you start a new combination
 BATCH_GLOB = "*_h_ip_*"       # e.g. "07_29_26_h_ip_0.01"
 RUN_GLOB = "h_ip_*_run*"      # e.g. "h_ip_0.01_run1", nested inside a batch
 TIMESTAMP_FMT = "%Y-%m-%d %H-%M-%S"   # matches "2026-07-28 16-47-45"
 
-AV_PERC = 0.25              # get_avalanches: percentile threshold for "active"
-AV_CONST_THRESHOLD = None   # get_avalanches: literal count threshold instead of perc (or None)
+AV_THRESHOLD_MODE = "perc"      # "adaptive", "perc", or "const"
+ADAPTIVE_THRESHOLD_FRAC = 0.5    # only used if AV_THRESHOLD_MODE == "adaptive"
+AV_PERC = 0.10             # used only if AV_THRESHOLD_MODE == "perc"
+AV_CONST_THRESHOLD = 2   # used only if AV_THRESHOLD_MODE == "const"
 
 AV_FLAG = 1                 # 1 = fast (exponents + DCC). 2 = also runs KS p-value tests (slow)
 AV_BM = 20                  # AV_analysis: upper limit of xmin search, burst size
@@ -95,7 +99,7 @@ DFA_NVALS = [int(n) for n in nolds.logarithmic_r(100, 100000, 2.0)]  # ~10 scale
 
 # All generated output lives under SWEEP_ROOT so your .gitignore rule
 # already covers it.
-OUTPUT_DIR = os.path.join(SWEEP_ROOT, "criticality_analysis_output")
+OUTPUT_DIR = os.path.join(SWEEP_ROOT, CONFIG_NAME, "criticality_analysis_output")
 AV_PLOT_DIR = os.path.join(OUTPUT_DIR, "av_plots")
 PER_RUN_CSV = os.path.join(OUTPUT_DIR, "criticality_summary_per_run.csv")
 BATCH_CSV = os.path.join(OUTPUT_DIR, "criticality_summary_pooled_by_batch.csv")
@@ -186,12 +190,25 @@ def get_run_avalanches(h5path):
 
     if raster is not None:
         pop_counts = raster.sum(axis=0).astype(float)
-        av = crt.get_avalanches(raster.astype(float), perc=AV_PERC, const_threshold=AV_CONST_THRESHOLD)
     else:
         pop_counts = np.round(activity * N_e).astype(float)
-        av = crt.get_avalanches(pop_counts, perc=AV_PERC, ncells=N_e, const_threshold=AV_CONST_THRESHOLD)
 
-    return h_ip, N_e, raster, pop_counts, av["S"], av["T"]
+    if AV_THRESHOLD_MODE == "adaptive":
+        # scales with each run's own activity level, so it means the same
+        # thing at h_ip=0.01 as it does at h_ip=0.3, unlike a fixed perc
+        thr = max(1, int(round(pop_counts.mean() * ADAPTIVE_THRESHOLD_FRAC)))
+        av_kwargs = dict(const_threshold=thr)
+    elif AV_THRESHOLD_MODE == "const":
+        av_kwargs = dict(const_threshold=AV_CONST_THRESHOLD)
+    else:
+        av_kwargs = dict(perc=AV_PERC)
+
+    if raster is not None:
+        av = crt.get_avalanches(raster.astype(float), **av_kwargs)
+    else:
+        av = crt.get_avalanches(pop_counts, ncells=N_e, **av_kwargs)
+
+    return h_ip, N_e, raster, pop_counts, av["S"], av["T"], av["perc_threshold"]
 
 
 def run_av_analysis(S, T, pltname):
@@ -207,9 +224,9 @@ def run_av_analysis(S, T, pltname):
     )
 
 
-def analyze_one_run(run_label, h_ip, N_e, raster, pop_counts, n_avalanches):
+def analyze_one_run(batch_label, run_label, h_ip, N_e, raster, pop_counts, n_avalanches):
     """Per-run metrics -- everything except the pooled avalanche fit."""
-    row = {"run": run_label, "h_ip": h_ip, "N_e": N_e,
+    row = {"batch": batch_label, "run": run_label, "h_ip": h_ip, "N_e": N_e,
            "has_full_raster": raster is not None, "n_avalanches": n_avalanches}
 
     br_input = raster.astype(float) if raster is not None else pop_counts
@@ -228,10 +245,15 @@ def analyze_one_run(run_label, h_ip, N_e, raster, pop_counts, n_avalanches):
         susc, fano = crt.population_metrics(raster.astype(float))
         row["susceptibility"] = susc
         row["fano_factor"] = fano
+        activity = float(raster.mean())               # mean firing rate per neuron per bin (old's rho())
+        row["activity"] = activity
+        row["cv"] = (susc ** 0.5) / activity if activity > 0 else None  # old's cv() formula
     else:
         row["branching_parameter"] = None
         row["susceptibility"] = None
         row["fano_factor"] = None
+        row["activity"] = None
+        row["cv"] = None
 
     return row
 
@@ -242,7 +264,7 @@ def main():
     per_run_rows = []
     batch_rows = []
 
-    for batch_dir in sorted(glob.glob(os.path.join(SWEEP_ROOT, BATCH_GLOB))):
+    for batch_dir in sorted(glob.glob(os.path.join(SWEEP_ROOT, CONFIG_NAME, BATCH_GLOB))):
         batch_label = os.path.basename(batch_dir)
         print(f"=== batch {batch_label} ===")
 
@@ -263,14 +285,15 @@ def main():
 
             print(f"  --- {run_label}  (using attempt: {ts}) ---")
             try:
-                h_ip, N_e, raster, pop_counts, S, T = get_run_avalanches(h5path)
+                h_ip, N_e, raster, pop_counts, S, T, thr_used = get_run_avalanches(h5path)
                 batch_h_ip = h_ip
                 batch_S.append(S)
                 batch_T.append(T)
 
-                row = analyze_one_run(run_label, h_ip, N_e, raster, pop_counts, len(S))
+                row = analyze_one_run(batch_label, run_label, h_ip, N_e, raster, pop_counts, len(S))
+                row["av_threshold_used"] = thr_used
                 per_run_rows.append(row)
-                print(f"    h_ip={h_ip:.3f}  n_avalanches={len(S)}  "
+                print(f"    h_ip={h_ip:.3f}  threshold={thr_used}  n_avalanches={len(S)}  "
                       f"branching_ratio_exp={row['branching_ratio_exp']}  dfa={row['dfa']}")
             except Exception:
                 print(f"    FAILED on {h5path}:")
