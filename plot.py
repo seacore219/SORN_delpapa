@@ -35,7 +35,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 # ---------------------------------------------------------------------------
 
 SWEEP_ROOT = "nrp-sweep-data"
-CONFIG_NAME = "test_sweep"
+CONFIG_NAME = "batch_0.01_0.01_0.3"
 
 OUTPUT_DIR = os.path.join(SWEEP_ROOT, CONFIG_NAME, "criticality_analysis_output")
 PER_RUN_CSV = os.path.join(OUTPUT_DIR, "criticality_summary_per_run.csv")

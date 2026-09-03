@@ -78,7 +78,7 @@ TIMESTAMP_FMT = "%Y-%m-%d %H-%M-%S"   # matches "2026-07-28 16-47-45"
 
 AV_THRESHOLD_MODE = "perc"      # "adaptive", "perc", or "const"
 ADAPTIVE_THRESHOLD_FRAC = 0.5    # only used if AV_THRESHOLD_MODE == "adaptive"
-AV_PERC = 0.10             # used only if AV_THRESHOLD_MODE == "perc"
+AV_PERC = 0.5             # used only if AV_THRESHOLD_MODE == "perc"
 AV_CONST_THRESHOLD = 2   # used only if AV_THRESHOLD_MODE == "const"
 
 AV_FLAG = 1                 # 1 = fast (exponents + DCC). 2 = also runs KS p-value tests (slow)
