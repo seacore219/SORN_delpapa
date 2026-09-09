@@ -45,8 +45,13 @@ c.display = True
 # save the spikes of the perturbation perdiod:
 # first half is the non-perturbated network
 # second half is the perturbated network
-c.stats.only_last_spikes = (2*c.steps_perturbation)
+#~ c.stats.only_last_spikes = (2*c.steps_perturbation)
+# save the spikes of the whole simulation instead (E and I):
+# with only_last_spikes == N_steps the stats store every step, see SpikesStat
+c.stats.only_last_spikes = c.N_steps
 c.stats.save_spikes = True
+# how many of the last steps the raster plots show (plot_standard.py)
+c.stats.raster_steps = 1000
 
 c.experiment.module = 'delpapa.experiment_FrozenPlasticity'
 c.experiment.name = 'Experiment_test'

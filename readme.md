@@ -43,6 +43,46 @@ Parameters and Experiments: `param_CountingTask.py`, `experiment_CountingTask.py
 Figure: `avalanches/Fig7.py`.
 
 
+## Frozen plasticity: perturbation currently disabled
+
+`experiment_FrozenPlasticity.py` is set up to run as a **standard, continuous
+SORN simulation**: the three `sorn.simulation()` calls in `run()` add up to one
+uninterrupted `c.N_steps` run with every plasticity mechanism active. The
+network snapshot at `c.steps_plastic` (`net_before_pert.pickle`) is still
+written, but the reload, the re-seeding and the five freezing assignments are
+commented out with `#~`. To restore the protocol of Del Papa et al. (2017),
+uncomment every `#~` line in `run()` (and nothing else), and switch the
+`plot_results_single` import at the top of the file back to
+`plot_results_perturbation`.
+
+The experiment now records, for the whole simulation:
+
+| h5 array | stat | shape |
+| --- | --- | --- |
+| `activity`, `activityInh` | `ActivityStat`, `ActivityInhibStat` | `N_steps` |
+| `Spikes` | `SpikesStat` | `N_e x N_steps` |
+| `SpikesInh` | `SpikesInhStat` | `N_i x N_steps` |
+| `ConnectionFraction` | `ConnectionFractionStat` | `N_steps` |
+| `endweight` | `EndWeightStat` | `W_ee`, `N_e x N_e` |
+| `FullEndWeight` | `FullEndWeightStat` | `[[W_ee, W_ei], [W_ie, 0]]`, `N x N` |
+
+Every spike is kept because `param_FrozenPlasticity.py` sets
+`c.stats.only_last_spikes = c.N_steps`. **This is memory hungry**: the spike
+arrays are float64, so a 6M step run of 200 excitatory and 40 inhibitory
+neurons needs about **11.6 GB of RAM** (9.6 GB for `Spikes`, 1.9 GB for
+`SpikesInh`), allocated up front in `stats.start()` — a machine without room
+fails in the first seconds rather than hours in. Run these sequentially
+(`--jobs 1`). On disk the h5 is zlib compressed, so the file is much smaller.
+If you override `c.N_steps` (or the `steps_*` parameters) from the sweep
+driver, repeat `c.stats.only_last_spikes = c.N_steps` with `--exec`; the driver
+warns about this.
+
+Because every spike is saved, `plot_single` uses `delpapa/plot_standard.py`
+instead of `plot.py`: it saves the connection fraction and activity over the
+whole run, but limits the rasters to the last `c.stats.raster_steps` (default
+1000) steps. `plot.py` is unchanged — rastering 6M steps would hand matplotlib
+~10^8 line segments.
+
 ## Parameter sweeps
 
 `run_sweep.py` (in the repository root) runs `common/test_single.py` repeatedly

@@ -102,23 +102,6 @@ LINKED_PARAMS = {
     "h_ip": ("h_ip", "W_ei.h_ip"),
 }
 
-# Parameters whose value is used to compute *other* parameters inside the base
-# param file.  Overriding them here happens after the base file was executed, so
-# the derived quantities keep their old value unless they are recomputed with
-# --exec.  The exact formulas differ between param files, hence a warning
-# instead of a silent fix-up.
-DEPENDENT_PARAMS = {
-    "N_e": ("c.N_i, c.N, c.W_ee.lamb, c.W_ee.sp_prob, c.W_ei.lamb, c.W_ie.lamb",
-            "c.N_i = int(np.floor(0.2*c.N_e)); c.N = c.N_e + c.N_i; "
-            "c.W_ee.lamb = 0.1*c.N_e; c.W_ei.lamb = 0.2*c.N_e; "
-            "c.W_ie.lamb = 1.0*c.N_i"),
-    "N_i": ("c.N, c.W_ie.lamb", "c.N = c.N_e + c.N_i; c.W_ie.lamb = 1.0*c.N_i"),
-    "steps_plastic": ("c.N_steps",
-                      "c.N_steps = c.steps_plastic + 2*c.steps_perturbation"),
-    "steps_perturbation": ("c.N_steps",
-                           "c.N_steps = c.steps_plastic + 2*c.steps_perturbation"),
-}
-
 PY2_CANDIDATES = ("python2", "python2.7", "python2.6", "python")
 
 # common/sorn.py writes '\rSimulation: NN%' while c.display is True, once per
@@ -277,6 +260,26 @@ def render_param_module(base_module, assignments, file_suffix, vary_param,
     lines.append("    pass")
     lines.append("")
     return "\n".join(lines)
+
+
+def dependent_lines(param_module, name):
+    """Lines of the base param file that compute something from `c.<name>`.
+
+    Overrides are applied after the base file has run, so anything the file
+    derived from a swept parameter keeps its original value.  The formulas
+    differ between param files (param_Zheng2013 has no steps_perturbation at
+    all), so the file itself is quoted rather than a guessed formula.
+    """
+    path = REPO_ROOT.joinpath(*param_module.split(".")).with_suffix(".py")
+    try:
+        source = path.read_text().splitlines()
+    except OSError:
+        return []
+    uses = re.compile(r"\bc\.%s\b" % re.escape(name))
+    assigns = re.compile(r"^\s*c\.%s\s*=" % re.escape(name))
+    return [line.strip() for line in source
+            if uses.search(line) and not assigns.match(line)
+            and not line.strip().startswith("#")]
 
 
 def ensure_generated_package():
@@ -940,14 +943,21 @@ def main(argv=None):
     print("runs       : %d (%d value set(s) x %d repeat(s))"
           % (len(runs), len(runs) // args.repeats, args.repeats))
 
-    overridden = [name for name, _ in args.sweep] + [name for name, _ in args.set]
-    for name in overridden:
-        if name in DEPENDENT_PARAMS and not args.exec_code:
-            dependents, suggestion = DEPENDENT_PARAMS[name]
-            print("\nwarning: %s is computed into %s inside %s.\n"
-                  "         Those keep their original value unless you "
-                  "recompute them, e.g.\n         --exec '%s'"
-                  % (name, dependents, args.param, suggestion))
+    if not args.exec_code:
+        overridden = [name for name, _ in args.sweep] + [name
+                                                         for name, _ in args.set]
+        for name in overridden:
+            lines = dependent_lines(args.param, name)
+            if not lines:
+                continue
+            print("\nwarning: %s.py computes these from c.%s:" % (
+                args.param.rsplit(".", 1)[-1], name))
+            for line in lines[:6]:
+                print("             %s" % line)
+            if len(lines) > 6:
+                print("             ... and %d more" % (len(lines) - 6))
+            print("         They keep their original value unless you repeat "
+                  "them with --exec.")
 
     interpreter = detect_interpreter(args.python)
     if interpreter is None and not args.dry_run:
