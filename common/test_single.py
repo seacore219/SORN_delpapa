@@ -29,7 +29,7 @@ def debugger(type,flag):
 np.seterrcall(debugger)
 np.seterr(all='call')
 
-##### To control the random seed
+#### To control the random seed
 #~ np.random.seed(1)
 
 # Parameters are read from the second command line argument
