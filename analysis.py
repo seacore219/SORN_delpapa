@@ -51,7 +51,8 @@ import traceback
 
 import sys
 if sys.version_info < (3, 9):
-    import importlib, importlib_resources
+    import importlib.resources
+    import importlib_resources
     importlib.resources.files = importlib_resources.files
 
 import nolds
