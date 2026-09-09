@@ -80,6 +80,15 @@ class Experiment_test(AbstractExperiment):
         #~ seed(newseed)
         sorn.simulation(c.steps_perturbation)
 
+        # The stats now hold several GB of spikes, and quicksave() in
+        # common/sorn.py saves/restores sorn.stats around pickle.dump without
+        # actually detaching it - so the final quicksave in test_single.py
+        # would try to pickle those arrays and die with
+        # 'OverflowError: cannot serialize a string larger than 2 GiB'.
+        # Everything the stats hold is already written to result.h5 by then,
+        # and this is the same idiom used around the quicksave above.
+        sorn.stats = 0
+
         return {'source_plastic':self.inputsource}
 
     def plot_single(self,path,filename):
