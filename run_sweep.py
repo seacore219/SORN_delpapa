@@ -39,6 +39,22 @@ Check what would be executed without running anything::
 
     python3 run_sweep.py --dry-run
 
+Progress
+--------
+While a sweep runs, a status line reports how many simulations are done, the
+phase and percentage of the ones in flight, the elapsed time and an ETA::
+
+    [3/10 done] h_ip_0.06 r1 phase 2 47% 21m14s (ETA 24m) · sweep 1h02m · ETA 2h30m, done ~16:41
+
+The percentage is read from the ``Simulation: NN%`` message that
+``common/sorn.py`` already prints while ``c.display`` is True (all delpapa
+param files set it); no simulation code is involved, and the raw output still
+goes to the run's log file untouched.  The sweep ETA appears once the first run
+has finished -- until then only the current phase can be extrapolated -- and is
+scaled by ``c.N_steps`` so that sweeping the number of steps still predicts
+well.  The line refreshes in place on a terminal and is printed every minute
+when the output is redirected (``--progress-interval`` changes or disables it).
+
 Results
 -------
 By default the backup directory produced by each simulation is moved into::
@@ -104,6 +120,13 @@ DEPENDENT_PARAMS = {
 }
 
 PY2_CANDIDATES = ("python2", "python2.7", "python2.6", "python")
+
+# common/sorn.py writes '\rSimulation: NN%' while c.display is True, once per
+# percent of each simulation phase.  Reading it off the child's stdout is what
+# drives the progress display -- no simulation code is involved.
+PROGRESS_RE = re.compile(r"Simulation:\s*(\d+)\s*%")
+TOTAL_STEPS_PREFIX = "[run_sweep] total_steps="
+TOTAL_STEPS_RE = re.compile(re.escape(TOTAL_STEPS_PREFIX) + r"(\d+)")
 
 
 # --------------------------------------------------------------------------
@@ -245,6 +268,13 @@ def render_param_module(base_module, assignments, file_suffix, vary_param,
         lines.append("import numpy as np  # convenience for --exec snippets")
         lines.append("# --exec")
         lines.extend(extra_code)
+    # Reported last, so it reflects every override above: run_sweep.py reads it
+    # from the simulation's output to estimate how long the sweep will take.
+    lines.append("")
+    lines.append("try:")
+    lines.append("    print('%s%%d' %% c.N_steps)" % TOTAL_STEPS_PREFIX)
+    lines.append("except Exception:")
+    lines.append("    pass")
     lines.append("")
     return "\n".join(lines)
 
@@ -282,6 +312,10 @@ class Run(object):
         self.module_path = module_path
         self.status = "pending"
         self.returncode = None
+        self.total_steps = None     # reported by the generated param module
+        self.phase = 0              # simulation phases seen so far
+        self.percent = None         # progress within the current phase
+        self.phase_started = None
         self.backup_dir = None
         self.result_dir = None
         self.started = None
@@ -303,6 +337,7 @@ class Run(object):
             "finished": self.finished,
             "duration_s": (round(self.finished - self.started, 1)
                            if self.started and self.finished else None),
+            "total_steps": self.total_steps,
             "log": str(self.log_path) if self.log_path else None,
         }
 
@@ -407,7 +442,16 @@ class SweepRunner(object):
         self.runs = runs
         self.sweep_dir = sweep_dir
         self.interpreter = interpreter
+        self.started = time.time()
         self.print_lock = threading.Lock()
+        self.tty = sys.stdout.isatty()
+        self.status_interval = args.progress_interval
+        if self.status_interval is None:
+            self.status_interval = 1.0 if self.tty else 60.0
+        self.show_status = self.status_interval > 0
+        self.status_width = 0
+        self.last_status = 0.0
+        self.ticker = None
         # test_single.py names its backup directory after the current second,
         # so two simulations starting within the same second would share (and
         # clobber) it.  Only one run is allowed in its start-up phase at a
@@ -419,7 +463,138 @@ class SweepRunner(object):
 
     def log(self, message):
         with self.print_lock:
+            self._erase_status()
             print(message, flush=True)
+            self._draw_status(force=True)
+
+    # -- progress display ---------------------------------------------------
+    def _erase_status(self):
+        """Blank the in-place status line (caller holds the print lock)."""
+        if self.tty and self.status_width:
+            sys.stdout.write("\r" + " " * self.status_width + "\r")
+            sys.stdout.flush()
+            self.status_width = 0
+
+    def _draw_status(self, force=False):
+        """Render the status line (caller holds the print lock)."""
+        if not self.show_status:
+            return
+        now = time.time()
+        if not force and now - self.last_status < self.status_interval:
+            return
+        if not any(run.status == "running" for run in self.runs):
+            return
+        text = self.status_text(now)
+        self.last_status = now
+        if self.tty:
+            width = shutil.get_terminal_size((100, 24)).columns - 1
+            text = text[:width]
+            sys.stdout.write("\r" + text)
+            sys.stdout.flush()
+            self.status_width = len(text)
+        else:
+            print(text, flush=True)
+
+    def tick(self):
+        with self.print_lock:
+            self._draw_status()
+
+    def start_ticker(self):
+        """Keep the elapsed time and ETA moving while the simulations are quiet."""
+        if not self.show_status:
+            return
+
+        def loop():
+            while not self.ticker_stop.wait(min(self.status_interval, 1.0)):
+                self.tick()
+
+        self.ticker_stop = threading.Event()
+        self.ticker = threading.Thread(target=loop, daemon=True)
+        self.ticker.start()
+
+    def stop_ticker(self):
+        if self.ticker is not None:
+            self.ticker_stop.set()
+            self.ticker.join(timeout=2)
+            self.ticker = None
+        with self.print_lock:
+            self._erase_status()
+
+    def status_text(self, now):
+        done = [r for r in self.runs if r.status == "done"]
+        active = [r for r in self.runs if r.status == "running"]
+        parts = ["[%d/%d done%s]" % (
+            len(done), len(self.runs),
+            " · %d running" % len(active) if len(active) > 1 else "")]
+        for run in active[:3]:
+            fragment = "%s r%d" % (run.label, run.repeat)
+            if run.percent is not None:
+                fragment += " phase %d %d%%" % (run.phase, run.percent)
+            fragment += " " + format_duration(now - run.started)
+            estimate = self.run_eta(run, now)
+            if estimate is not None:
+                seconds, kind = estimate
+                fragment += " (%s %s)" % (kind, format_duration(seconds))
+            parts.append(fragment)
+        if len(active) > 3:
+            parts.append("+%d more" % (len(active) - 3))
+        parts.append("sweep " + format_duration(now - self.started))
+        eta = self.sweep_eta(now)
+        if eta is None:
+            parts.append("ETA -- (after the first run)")
+        else:
+            parts.append("ETA %s, done ~%s" % (
+                format_duration(eta),
+                time.strftime("%H:%M", time.localtime(now + eta))))
+        return " · ".join(parts)
+
+    # -- estimates ----------------------------------------------------------
+    def predicted_duration(self, run):
+        """Expected wall time of a run, from the runs that already finished."""
+        done = [r for r in self.runs
+                if r.status == "done" and r.started and r.finished]
+        if not done:
+            return None
+        durations = [r.finished - r.started for r in done]
+        steps = [r.total_steps for r in done]
+        if all(steps):
+            # Scale by simulated steps, so sweeping N_steps still predicts well.
+            per_step = sum(durations) / float(sum(steps))
+            typical = sorted(steps)[len(steps) // 2]
+            return per_step * (run.total_steps or typical)
+        return sum(durations) / float(len(durations))
+
+    def run_eta(self, run, now):
+        """(seconds, label) left for a running simulation, or None."""
+        predicted = self.predicted_duration(run)
+        if predicted is not None:
+            return max(predicted - (now - run.started), 0.0), "ETA"
+        # Nothing has finished yet: the current phase is all we can extrapolate.
+        if run.percent and run.phase_started:
+            elapsed = now - run.phase_started
+            if elapsed > 0:
+                return elapsed * (100.0 - run.percent) / run.percent, "phase ETA"
+        return None
+
+    def sweep_eta(self, now):
+        """Seconds left for the whole sweep, or None while nothing has finished."""
+        remaining = 0.0
+        running = [0.0]
+        for run in self.runs:
+            if run.status == "pending":
+                predicted = self.predicted_duration(run)
+                if predicted is None:
+                    return None
+                remaining += predicted
+            elif run.status == "running":
+                estimate = self.run_eta(run, now)
+                if estimate is None or estimate[1] != "ETA":
+                    return None
+                remaining += estimate[0]
+                running.append(estimate[0])
+        # The work is shared between --jobs workers, but the sweep cannot end
+        # before the longest running simulation does.
+        return max(remaining / max(self.args.jobs, 1), max(running))
 
     def environment(self):
         env = dict(os.environ)
@@ -456,6 +631,28 @@ class SweepRunner(object):
     def wait_for_next_second():
         now = time.time()
         time.sleep(1.05 - (now % 1.0))
+
+    def consume_output(self, run, raw):
+        """Track a run's progress from one piece of its output."""
+        text = raw.decode("utf-8", "replace").strip()
+        if not text:
+            return
+        match = PROGRESS_RE.search(text)
+        if match:
+            percent = int(match.group(1))
+            if run.percent is None or percent < run.percent:
+                run.phase += 1          # a new simulation phase started
+                run.phase_started = time.time()
+            run.percent = percent
+            with self.print_lock:
+                self._draw_status()
+            return
+        match = TOTAL_STEPS_RE.search(text)
+        if match:
+            run.total_steps = int(match.group(1))
+            return
+        if self.args.stream:
+            self.log("[%d] %s" % (run.index, text))
 
     def organize(self, run):
         """Move the backup directory into <sweep>/<label>/<repeat>/."""
@@ -504,16 +701,25 @@ class SweepRunner(object):
 
             deadline = (run.started + self.args.timeout
                         if self.args.timeout else None)
-            for line in process.stdout:
-                log_file.write(line)
+            # The progress message ends in '\r', not '\n', so read chunks and
+            # split on both -- otherwise a whole phase arrives as one line.
+            pending = b""
+            while True:
+                chunk = process.stdout.read1(4096)
+                if not chunk:
+                    break
+                log_file.write(chunk)
                 log_file.flush()
-                if self.args.stream:
-                    self.log("[%d] %s" % (run.index,
-                                          line.decode("utf-8", "replace").rstrip()))
+                pieces = re.split(b"[\r\n]", pending + chunk)
+                pending = pieces.pop()
+                for piece in pieces:
+                    self.consume_output(run, piece)
                 if deadline and time.time() > deadline:
                     process.kill()
                     log_file.write(b"\n# killed by run_sweep.py: timeout\n")
                     break
+            if pending:
+                self.consume_output(run, pending)
             process.wait()
 
         self.processes.pop(run.index, None)
@@ -530,10 +736,18 @@ class SweepRunner(object):
                 run.result_dir = run.backup_dir
 
         duration = run.finished - run.started
-        self.log("[%d/%d] %s %s (repeat %d) in %s%s"
+        eta = self.sweep_eta(run.finished)
+        done = sum(1 for r in self.runs if r.status == "done")
+        self.log("[%d/%d] %s %s (repeat %d) in %s · %d/%d done · sweep %s%s%s"
                  % (run.index, len(self.runs), run.status, run.label, run.repeat,
-                    format_duration(duration),
-                    "" if run.result_dir is None else " -> %s" % run.result_dir))
+                    format_duration(duration), done, len(self.runs),
+                    format_duration(run.finished - self.started),
+                    "" if eta is None else " · ETA %s, done ~%s" % (
+                        format_duration(eta),
+                        time.strftime("%H:%M",
+                                      time.localtime(run.finished + eta))),
+                    "" if run.result_dir is None else "\n        -> %s"
+                    % run.result_dir))
         if run.status == "failed":
             self.log("        exit code %s, see %s"
                      % (run.returncode, run.log_path))
@@ -668,6 +882,10 @@ def parse_args(argv):
     parser.add_argument(
         "--no-linked-params", dest="link_params", action="store_false",
         help="do not propagate h_ip to c.W_ei.h_ip (see LINKED_PARAMS)")
+    parser.add_argument(
+        "--progress-interval", type=float, default=None, metavar="SECONDS",
+        help="how often the progress line is refreshed; 0 turns it off "
+             "(default: 1 on a terminal, 60 when the output is redirected)")
     parser.add_argument(
         "--stream", action="store_true",
         help="mirror simulation output to the console as well as the log")
@@ -824,12 +1042,14 @@ def main(argv=None):
 
     threads = [threading.Thread(target=worker)
                for _ in range(min(args.jobs, len(queue) or 1))]
+    runner.start_ticker()
     for thread in threads:
         thread.start()
     for thread in threads:
         # join() is interruptible, so signal handlers still run while waiting.
         while thread.is_alive():
             thread.join(timeout=0.5)
+    runner.stop_ticker()
 
     for signum, handler in previous_handlers.items():
         signal.signal(signum, handler)
@@ -838,6 +1058,7 @@ def main(argv=None):
         for run in runs:
             if run.status == "running":
                 run.status = "interrupted"
+        runner.show_status = False
         write_manifest(manifest_path, args, sweep_id, runs, interpreter)
         remaining = [r for r in runs if r.status == "pending"]
         print("\nstopped after %s; %d run(s) not started"
@@ -854,8 +1075,11 @@ def main(argv=None):
 
     done = [r for r in runs if r.status == "done"]
     failed = [r for r in runs if r.status not in ("done", "pending")]
-    print("\nfinished %d/%d runs in %s"
-          % (len(done), len(runs), format_duration(time.time() - started)))
+    timed = [r for r in done if r.started and r.finished]
+    print("\nfinished %d/%d runs in %s%s"
+          % (len(done), len(runs), format_duration(time.time() - started),
+             "" if not timed else " (%s per run on average)" % format_duration(
+                 sum(r.finished - r.started for r in timed) / len(timed))))
     print("results  : %s" % sweep_dir)
     print("manifest : %s" % manifest_path)
     if failed:

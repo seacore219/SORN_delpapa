@@ -73,6 +73,9 @@ Useful options (`python3 run_sweep.py --help` lists them all):
 * `--exec CODE` -- extra python line for every run, to recompute quantities the
   param file derives from a swept parameter, e.g.
   `--exec 'c.N_steps = c.steps_plastic + 2*c.steps_perturbation'`.
+* `--progress-interval SECONDS` -- how often the progress line refreshes
+  (default: 1 on a terminal, 60 when redirected, e.g. under `nohup`); `0`
+  turns it off.
 * `--dry-run` -- show the planned runs and the generated parameters.
 * `--resume` -- reuse a sweep directory, skipping runs that already finished.
 
@@ -80,6 +83,18 @@ Nothing in the existing code is modified: for every sweep point the driver
 generates a small module in `sweep_params/` that imports the base parameter
 file and overrides only the swept values, and passes it to `test_single.py`
 like a hand written parameter file.
+
+While the sweep runs, a status line shows the number of finished simulations,
+the phase and percentage of the running ones, the elapsed time and an ETA:
+
+```
+[3/10 done] h_ip_0.06 r1 phase 2 47% 21m14s (ETA 24m) · sweep 1h02m · ETA 2h30m, done ~16:41
+```
+
+The percentage comes from the `Simulation: NN%` message `common/sorn.py`
+already prints while `c.display` is True (all `delpapa` param files set it), so
+no simulation code is involved. The sweep ETA appears once the first run has
+finished, since that is the first measurement of how long a run takes.
 
 Results are collected in `backup/sweeps/<sweep>/<value>/<repetition>/common/result.h5`
 (repetitions numbered from 1), which is the layout the avalanche scripts
