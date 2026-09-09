@@ -43,6 +43,52 @@ Parameters and Experiments: `param_CountingTask.py`, `experiment_CountingTask.py
 Figure: `avalanches/Fig7.py`.
 
 
+## Parameter sweeps
+
+`run_sweep.py` (in the repository root) runs `common/test_single.py` repeatedly
+while sweeping one or more parameters. The driver itself is **python 3** and
+only uses the standard library; each simulation is launched as a subprocess
+with a python 2 interpreter (auto-detected, or given with `--python`), since
+the model code is python 2.7.
+
+Sweep `h_ip` from 0.02 to 0.2 in steps of 0.02 (10 simulations) with the frozen
+plasticity parameters and experiment -- this is what the defaults do:
+
+```
+python3 run_sweep.py
+python3 run_sweep.py --param delpapa.param_FrozenPlasticity --sweep h_ip=0.02:0.2:0.02
+```
+
+Useful options (`python3 run_sweep.py --help` lists them all):
+
+* `--sweep NAME=SPEC` -- `start:stop:step` (stop included), a comma separated
+  list, or a single value. Repeat the option to sweep several parameters; all
+  combinations are run. Dotted names address sub-bunches, e.g.
+  `--sweep W_ee.eta_stdp=0.001,0.004`. Sweeping `h_ip` sets both `c.h_ip` and
+  `c.W_ei.h_ip`, as the param files do.
+* `--repeats N` -- simulations per parameter value.
+* `--jobs N` -- simulations to run concurrently.
+* `--set NAME=VALUE` -- constant override for every run, e.g.
+  `--set N_steps=100000` for a quick test.
+* `--exec CODE` -- extra python line for every run, to recompute quantities the
+  param file derives from a swept parameter, e.g.
+  `--exec 'c.N_steps = c.steps_plastic + 2*c.steps_perturbation'`.
+* `--dry-run` -- show the planned runs and the generated parameters.
+* `--resume` -- reuse a sweep directory, skipping runs that already finished.
+
+Nothing in the existing code is modified: for every sweep point the driver
+generates a small module in `sweep_params/` that imports the base parameter
+file and overrides only the swept values, and passes it to `test_single.py`
+like a hand written parameter file.
+
+Results are collected in `backup/sweeps/<sweep>/<value>/<repetition>/common/result.h5`
+(repetitions numbered from 1), which is the layout the avalanche scripts
+expect: point their `exper_path` at `backup/sweeps/<sweep>/<value>/` and set
+`number_of_files` to the number of repetitions. `--layout raw` leaves the
+backup directories where `test_single.py` created them instead. Every sweep
+directory also holds a `manifest.json` with the parameters, status, runtime and
+output directory of each run, plus the full simulation output in `logs/`.
+
 ## Dependencies
 
 This code relies on the [powerlaw](https://pypi.python.org/pypi/powerlaw) python package to fit the power-law distributions of avalanche sizes and durations.
