@@ -49,12 +49,19 @@ import glob
 import os
 import traceback
 
+import sys
+if sys.version_info < (3, 9):
+    import importlib, importlib_resources
+    importlib.resources.files = importlib_resources.files
+
 import nolds
 import h5py
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
+
+
 
 # mrestimator v0.1.8 calls a matplotlib Legend attribute that newer
 # matplotlib versions removed -- alias it back so full_analysis() doesn't

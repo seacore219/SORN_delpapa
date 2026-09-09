@@ -50,7 +50,8 @@ import powerlaw as pl
 # CONFIG
 # ---------------------------------------------------------------------------
 
-H_IP_DIR = "/Applications/SORN/SORN_delpapa/nrp-sweep-data/batch_0.01_0.01_0.3/07_29_26_h_ip_0.1"
+H_IP_DIR = "/Applications/SORN/SORN_delpapa/nrp-sweep-data/batch_0.01_0.01_0.3/09_03_26_h_ip_0.1"
+# H_IP_DIR = "/Applications/SORN/SORN_delpapa/nrp-sweep-data/batch_0.01_0.01_0.3/07_29_26_h_ip_0.1"  # old nested-structure sweep data
 RUN_GLOB = "h_ip_*_run*"
 TIMESTAMP_FMT = "%Y-%m-%d %H-%M-%S"
 
@@ -97,16 +98,48 @@ def find_latest_valid_result(test_single_dir):
     return None, None
 
 
+# --- OLD nested structure: <h_ip_dir>/h_ip_X_runN/test_single/<timestamp>/common/result.h5
+# def gather_run_files(h_ip_dir):
+#     h5_paths = []
+#     for run_dir in sorted(glob.glob(os.path.join(h_ip_dir, RUN_GLOB))):
+#         test_single_dir = os.path.join(run_dir, "test_single")
+#         if not os.path.isdir(test_single_dir):
+#             print(f"  {os.path.basename(run_dir)}: no test_single/ folder, skipping")
+#             continue
+#         h5path, ts = find_latest_valid_result(test_single_dir)
+#         if h5path is None:
+#             print(f"  {os.path.basename(run_dir)}: no usable result.h5, skipping")
+#             continue
+#         h5_paths.append(h5path)
+#     return h5_paths
+
+
+# --- NEW flat structure: <h_ip_dir>/<timestamp>/common/result.h5 -- each
+# timestamped folder directly under h_ip_dir is one independent run, no
+# h_ip_X_runN/test_single wrapping and no retry-folder deduplication (every
+# timestamp found is assumed to be a distinct, real run).
 def gather_run_files(h_ip_dir):
     h5_paths = []
-    for run_dir in sorted(glob.glob(os.path.join(h_ip_dir, RUN_GLOB))):
-        test_single_dir = os.path.join(run_dir, "test_single")
-        if not os.path.isdir(test_single_dir):
-            print(f"  {os.path.basename(run_dir)}: no test_single/ folder, skipping")
+    for name in sorted(os.listdir(h_ip_dir)):
+        full = os.path.join(h_ip_dir, name)
+        if not os.path.isdir(full):
             continue
-        h5path, ts = find_latest_valid_result(test_single_dir)
-        if h5path is None:
-            print(f"  {os.path.basename(run_dir)}: no usable result.h5, skipping")
+        try:
+            datetime.datetime.strptime(name, TIMESTAMP_FMT)
+        except ValueError:
+            continue  # not a timestamped run folder (e.g. a stray file), skip
+        h5path = os.path.join(full, "common", "result.h5")
+        if not os.path.isfile(h5path):
+            print(f"  {name}: no result.h5, skipping")
+            continue
+        try:
+            with h5py.File(h5path, "r") as f:
+                if "c" not in f or "N_e" not in f["c"]:
+                    print(f"  {name}: result.h5 missing 'c' group, skipping")
+                    continue
+                _ = f["c/N_e"][0]
+        except Exception:
+            print(f"  {name}: result.h5 failed to open, skipping")
             continue
         h5_paths.append(h5path)
     return h5_paths
@@ -212,6 +245,16 @@ def main():
 
     T_fit = pl.Fit(T_data, xmin=T_XMIN, xmax=T_XMAX, discrete=True)
     T_alpha = T_fit.power_law.alpha
+
+    # Diagnostic: what does an UNCONSTRAINED fit (powerlaw finds its own
+    # optimal xmin via KS-minimization, no fixed xmax) say about this data?
+    # If this gives a sensible, non-boundary alpha while the fixed-window
+    # fit above pins at ~1.0, that's strong evidence the paper's [T_XMIN,
+    # T_XMAX] window is simply wrong for this dataset, not that the
+    # underlying distribution/dynamics are broken.
+    T_fit_auto = pl.Fit(T_data, discrete=True)
+    print(f"\n[DIAGNOSTIC] Duration (T): fixed window [{T_XMIN},{T_XMAX}] -> alpha={T_alpha:.3f}")
+    print(f"[DIAGNOSTIC] Duration (T): auto xmin={T_fit_auto.xmin} (no xmax) -> alpha={T_fit_auto.power_law.alpha:.3f}")
     T_fit.power_law.plot_pdf(color=c_duration,
                               label=r'$ \alpha = $' + str(round(T_alpha, 2)),
                               linewidth=line_width_fit, zorder=3)
@@ -248,6 +291,10 @@ def main():
 
     S_fit = pl.Fit(S_data, xmin=S_XMIN, xmax=S_XMAX, discrete=True)
     S_alpha = S_fit.power_law.alpha
+
+    S_fit_auto = pl.Fit(S_data, discrete=True)
+    print(f"[DIAGNOSTIC] Size (S): fixed window [{S_XMIN},{S_XMAX}] -> alpha={S_alpha:.3f}")
+    print(f"[DIAGNOSTIC] Size (S): auto xmin={S_fit_auto.xmin} (no xmax) -> alpha={S_fit_auto.power_law.alpha:.3f}\n")
     S_fit.power_law.plot_pdf(color=c_size,
                               label=r'$ \tau = $' + str(round(S_alpha, 2)),
                               linewidth=line_width_fit, zorder=3)
