@@ -7,3 +7,6 @@ sweep_params/
 # Python
 *.pyc
 __pycache__/
+
+# analysis
+criticality_tumbleweed/
