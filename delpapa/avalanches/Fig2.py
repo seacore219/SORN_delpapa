@@ -49,7 +49,7 @@ THETA = 'half'
 
 #count files
 print 'Loading experiment files...'
-exper_path = ''
+exper_path = '../../backup/N200'
 
 #load the data in 'data_all'
 data_all = zeros((number_of_files, stable_steps))
@@ -248,7 +248,7 @@ print 'Fig 2D...'
 fig_2d = subplot(gs[3])
 for v in values:
 
-    exper_path = ''
+    exper_path = '../../backup/N'+v
 
     data_all = np.zeros((number_of_files, stable_steps))
     for result_file in range(number_of_files):
@@ -291,7 +291,7 @@ print 'Fig 2E...'
 fig_2e = subplot(gs[4])
 for v in values:
 
-    exper_path = ''
+    exper_path = '../../backup/N'+v
 
     data_all = np.zeros((number_of_files, stable_steps))
     for result_file in range(number_of_files):
