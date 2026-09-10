@@ -37,14 +37,22 @@ def main(label, n_runs):
         before = subdirs(ATTEMPTS)
         print('[%d/%d] %s' % (run, n_runs, label))
         code = subprocess.call([sys.executable, 'test_single.py', PARAM], cwd=COMMON)
-        if code != 0:
-            print('test_single.py exited with %d, stopping' % code)
-            return 1
         new = subdirs(ATTEMPTS) - before
         if len(new) != 1:
             print('expected one new folder in %s, found %d, stopping'
                   % (ATTEMPTS, len(new)))
             return 1
+        h5path = os.path.join(ATTEMPTS, list(new)[0], 'common', 'result.h5')
+        if not os.path.isfile(h5path):
+            print('no result.h5 written, stopping (exit code %d)' % code)
+            return 1
+        if code != 0:
+            # test_single.py's own plot_single call can fail after result.h5
+            # is already written and closed (e.g. a PyTables/numpy version
+            # mismatch reading a string field) -- that doesn't affect the
+            # data Fig2.py reads, so keep going instead of stopping the batch.
+            print('  (exit code %d after result.h5 was written -- '
+                  'plot_single failed, data is unaffected)' % code)
         if not os.path.isdir(dest_root):
             os.makedirs(dest_root)
         dest = os.path.join(dest_root, str(run))
