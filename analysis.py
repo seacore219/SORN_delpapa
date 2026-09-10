@@ -62,10 +62,18 @@ BATCH_CSV = os.path.join(OUTPUT_DIR, "criticality_summary_pooled_by_batch.csv")
 SAVE_AV_PLOTS = True   # set False to skip avalanche distribution plots
  
 # Restrict every metric to this absolute step range -- discards the initial
-# adaptation transient and the frozen Lyapunov-only tail, keeping only the
-# stabilized-but-still-plastic window.
+# adaptation transient, keeping only the stabilized-but-still-plastic window.
+# Ends at 4,000,000 on purpose: the original frozen-plasticity protocol only
+# ever ran plastic dynamics to that step (array indices 4M-6M were a frozen
+# replay of t=2M-4M, not new time), so this is the range that is directly
+# comparable with earlier batches.
 ANALYSIS_WINDOW_START = 2500000
-ANALYSIS_WINDOW_END = 6000000
+ANALYSIS_WINDOW_END = 4000000
+
+# Derive every metric from `activity` (written by ActivityStat, unchanged from
+# the original repo) rather than from the `Spikes` raster, which only newer
+# runs contain. Set True to go back to the raster.
+USE_RASTER = False
  
 # ---------------------------------------------------------------------------
  
@@ -108,7 +116,7 @@ def load_sim(h5path):
         N_e = int(f["c/N_e"][0])
         h_ip = float(f["c/h_ip"][0])
         N_steps_total = int(f["c/N_steps"][0])
-        has_raster = "Spikes" in f
+        has_raster = USE_RASTER and "Spikes" in f
         raster = f["Spikes"][0].astype(bool) if has_raster else None  # (N_e, T_saved)
         activity = f["activity"][0]  # (N_steps_total,) -- always the full run, starts at step 0
  
