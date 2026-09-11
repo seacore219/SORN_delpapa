@@ -55,7 +55,7 @@ exper_path = '../../backup/N200'
 data_all = zeros((number_of_files, stable_steps))
 for result_file in range(number_of_files):
         result_path = exper_path +'/'+str(result_file+1)+'/common/'
-        h5 = tables.openFile(os.path.join(result_path,'result.h5'),'r')
+        h5 = tables.open_file(os.path.join(result_path,'result.h5'),'r')
         data = h5.root
         data_all[result_file] = \
                      around(data.activity[0][-stable_steps:]*data.c.N_e)
@@ -253,7 +253,7 @@ for v in values:
     data_all = np.zeros((number_of_files, stable_steps))
     for result_file in range(number_of_files):
         result_path = exper_path+'/'+str(result_file+1)+'/common/'
-        h5 = tables.openFile(os.path.join(result_path,'result.h5'),'r')
+        h5 = tables.open_file(os.path.join(result_path,'result.h5'),'r')
         data = h5.root
         data_all[result_file] = \
                   np.around(data.activity[0][-stable_steps:]*data.c.N_e)
@@ -296,7 +296,7 @@ for v in values:
     data_all = np.zeros((number_of_files, stable_steps))
     for result_file in range(number_of_files):
         result_path = exper_path+'/'+str(result_file+1)+'/common/'
-        h5 = tables.openFile(os.path.join(result_path,'result.h5'),'r')
+        h5 = tables.open_file(os.path.join(result_path,'result.h5'),'r')
         data = h5.root
         data_all[result_file] = \
                   np.around(data.activity[0][-stable_steps:]*data.c.N_e)
