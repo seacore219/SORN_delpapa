@@ -14,11 +14,30 @@
 from pylab import *
 import tables
 import os
+import re
 from tempfile import TemporaryFile
 from matplotlib import gridspec
 
 import data_analysis as analysis
 import powerlaw as pl
+
+_TIMESTAMP_RE = re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$')
+
+def _result_h5(run_dir):
+    r"""Path to a run's result.h5, preferring a nested timestamp folder
+    (backup\N200\1\2026-09-10 15-49-17\common\result.h5) over a stale
+    common\ sitting directly under run_dir. Two invocations of
+    run_replication.py for the same label can produce both -- the nested
+    one is the later, complete run. Falls back to the direct path
+    otherwise, or when more than one nested timestamp exists (ambiguous)."""
+    direct = os.path.join(run_dir, 'common', 'result.h5')
+    if os.path.isdir(run_dir):
+        nested = [d for d in os.listdir(run_dir)
+                  if _TIMESTAMP_RE.match(d)
+                  and os.path.isfile(os.path.join(run_dir, d, 'common', 'result.h5'))]
+        if len(nested) == 1:
+            return os.path.join(run_dir, nested[0], 'common', 'result.h5')
+    return direct
 
 ### Files to run
 number_of_files = 50
@@ -54,8 +73,8 @@ exper_path = '../../backup/N200'
 #load the data in 'data_all'
 data_all = zeros((number_of_files, stable_steps))
 for result_file in range(number_of_files):
-        result_path = exper_path +'/'+str(result_file+1)+'/common/'
-        h5 = tables.open_file(os.path.join(result_path,'result.h5'),'r')
+        run_dir = os.path.join(exper_path, str(result_file+1))
+        h5 = tables.open_file(_result_h5(run_dir),'r')
         data = h5.root
         data_all[result_file] = \
                      around(data.activity[0][-stable_steps:]*data.c.N_e)
@@ -252,8 +271,8 @@ for v in values:
 
     data_all = np.zeros((number_of_files, stable_steps))
     for result_file in range(number_of_files):
-        result_path = exper_path+'/'+str(result_file+1)+'/common/'
-        h5 = tables.open_file(os.path.join(result_path,'result.h5'),'r')
+        run_dir = os.path.join(exper_path, str(result_file+1))
+        h5 = tables.open_file(_result_h5(run_dir),'r')
         data = h5.root
         data_all[result_file] = \
                   np.around(data.activity[0][-stable_steps:]*data.c.N_e)
@@ -295,8 +314,8 @@ for v in values:
 
     data_all = np.zeros((number_of_files, stable_steps))
     for result_file in range(number_of_files):
-        result_path = exper_path+'/'+str(result_file+1)+'/common/'
-        h5 = tables.open_file(os.path.join(result_path,'result.h5'),'r')
+        run_dir = os.path.join(exper_path, str(result_file+1))
+        h5 = tables.open_file(_result_h5(run_dir),'r')
         data = h5.root
         data_all[result_file] = \
                   np.around(data.activity[0][-stable_steps:]*data.c.N_e)
