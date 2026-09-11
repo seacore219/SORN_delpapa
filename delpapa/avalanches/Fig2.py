@@ -44,7 +44,7 @@ c_expcut = 'k'
 # Fig. 2A and 2B SORN size and duration with exponents (A and B)
 
 exp_name = 'N200'
-stable_steps = 3e6 # steps to use: after transient (2e6)
+stable_steps = int(3e6) # steps to use: after transient (2e6)
 THETA = 'half'
 
 #count files
