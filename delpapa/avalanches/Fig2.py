@@ -432,6 +432,8 @@ fig.subplots_adjust(hspace=.65)
 # saving figures
 print 'Saving figures...',
 result_path = '../../plots'
+if not os.path.exists(result_path):
+    os.mkdir(result_path)
 result_name_png = 'Fig2.pdf'
 savefig(os.path.join(result_path, result_name_png), format='pdf')
 print 'done\n\n'
